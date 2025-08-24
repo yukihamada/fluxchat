@@ -3,7 +3,7 @@ module fluxchat/api
 go 1.22
 
 require (
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/nats-io/nats.go v1.31.0
 	github.com/nats-io/nuid v1.0.1
 )
