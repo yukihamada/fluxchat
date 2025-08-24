@@ -1,0 +1,283 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GO_VERSION: '1.22'
+  NODE_VERSION: '18'
+
+jobs:
+  # Lint and format checks
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+            
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+            
+      - name: Install Go tools
+        run: |
+          go install golang.org/x/tools/cmd/goimports@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          
+      - name: Go Format Check
+        run: |
+          cd apps/api
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted"
+            gofmt -d .
+            exit 1
+          fi
+          
+      - name: Go Imports Check
+        run: |
+          cd apps/api
+          if [ -n "$(goimports -l .)" ]; then
+            echo "Go imports are not formatted"
+            goimports -d .
+            exit 1
+          fi
+          
+      - name: Go Static Check
+        run: |
+          cd apps/api
+          staticcheck ./...
+          
+      - name: Install Web Dependencies
+        run: |
+          cd apps/web
+          npm ci
+          
+      - name: Web Lint
+        run: |
+          cd apps/web
+          npm run lint
+
+  # Unit tests
+  test-api:
+    name: Test API
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+            
+      - name: Run Go Tests
+        run: |
+          cd apps/api
+          go test -v -race -coverprofile=coverage.out ./...
+          
+      - name: Upload Go Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./apps/api/coverage.out
+          flags: api
+          name: api-coverage
+
+  test-web:
+    name: Test Web
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+            
+      - name: Install Dependencies
+        run: |
+          cd apps/web
+          npm ci
+          
+      - name: Run Jest Tests
+        run: |
+          cd apps/web
+          npm test -- --coverage
+          
+      - name: Upload Web Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./apps/web/coverage/lcov.info
+          flags: web
+          name: web-coverage
+
+  # E2E tests
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test-api, test-web]
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install API Dependencies
+        run: |
+          cd apps/api
+          go mod download
+          
+      - name: Install Web Dependencies
+        run: |
+          cd apps/web
+          npm ci
+          
+      - name: Install Playwright Browsers
+        run: |
+          cd apps/web
+          npx playwright install --with-deps ${{ matrix.browser }}
+          
+      - name: Start Services
+        run: |
+          docker compose up -d
+          sleep 5  # Wait for services
+          
+      - name: Run E2E Tests
+        run: |
+          cd apps/web
+          npm run test:e2e -- --project=${{ matrix.browser }}
+          
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ matrix.browser }}
+          path: apps/web/playwright-report/
+          retention-days: 7
+          
+      - name: Stop Services
+        if: always()
+        run: docker compose down
+
+  # Build artifacts
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test-api, test-web]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Build API
+        run: |
+          cd apps/api
+          go build -o fluxchat-api .
+          
+      - name: Build Web
+        run: |
+          cd apps/web
+          npm ci
+          npm run build
+          
+      - name: Upload API Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-binary
+          path: apps/api/fluxchat-api
+          
+      - name: Upload Web Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: apps/web/.next/
+
+  # Security scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/golang
+            p/javascript
+            p/typescript

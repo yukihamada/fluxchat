@@ -1,0 +1,25 @@
+# Global owners
+* @yuki
+
+# API specific
+/apps/api/ @yuki
+/packages/proto/ @yuki
+
+# Web specific
+/apps/web/ @yuki
+/packages/crypto/ @yuki
+
+# Infrastructure
+/infra/ @yuki
+/.github/ @yuki
+/docker-compose*.yml @yuki
+**/Dockerfile @yuki
+
+# Documentation
+/docs/ @yuki
+*.md @yuki
+
+# Security sensitive files
+/apps/api/internal/crypto/ @yuki
+/apps/api/internal/auth/ @yuki
+.env* @yuki

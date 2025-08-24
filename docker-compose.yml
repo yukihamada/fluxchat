@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # NATS JetStream for messaging
+  nats:
+    image: nats:2.10-alpine
+    container_name: fluxchat-nats
+    command: --jetstream
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+
+  # PostgreSQL for metadata
+  postgres:
+    image: postgres:16-alpine
+    container_name: fluxchat-postgres
+    environment:
+      POSTGRES_USER: fluxchat
+      POSTGRES_PASSWORD: dev-password
+      POSTGRES_DB: fluxchat
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # MinIO for file storage
+  minio:
+    image: minio/minio:latest
+    container_name: fluxchat-minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+
+volumes:
+  nats-data:
+  postgres-data:
+  minio-data:
