@@ -109,7 +109,7 @@ jobs:
           go test -v -race -coverprofile=coverage.out ./...
           
       - name: Upload Go Coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./apps/api/coverage.out
           flags: api
@@ -146,7 +146,7 @@ jobs:
           npm test -- --coverage
           
       - name: Upload Web Coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./apps/web/coverage/lcov.info
           flags: web
