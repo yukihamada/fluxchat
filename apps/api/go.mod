@@ -1,6 +1,6 @@
 module fluxchat/api
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.24.4
 
@@ -13,6 +13,6 @@ require (
 require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
-	golang.org/x/crypto v0.41.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 )
